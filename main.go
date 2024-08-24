@@ -18,36 +18,43 @@ func main() {
 		w.WriteHeader(http.StatusOK)
 		w.Write([]byte("Ready to go"))
 	})
+	mux.HandleFunc("/reset", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		accessCount = 0
+		w.Write([]byte("Reset count"))
+	})
 
-	log.Fatal(http.ListenAndServe(":8080", mux))
+	log.Fatal(http.ListenAndServe(":88", mux))
 }
 
 func getNextLine() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		recs := getContentFromCSV()
-		if accessCount < len(recs) {
-			line := strings.Join(recs[accessCount], ",")
-			accessCount++
-
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(line))
-
-			fmt.Println(line)
-		} else {
-
+		recs, err := GetContentFromCSV()
+		if err != nil {
+			log.Fatal(err)
+		}
+		fmt.Printf("Count: %v\n", accessCount)
+		fmt.Printf("length of recs: %v\n", len(recs))
+		if accessCount == len(recs) {
 			w.WriteHeader(http.StatusExpectationFailed)
 			w.Write([]byte("End of CSV reached"))
 
 			fmt.Println("Hit end of CSV file")
-
+			return
 		}
+
+		line := strings.Join(recs[accessCount], ",")
+		accessCount++
+
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(line))
 	})
 }
 
-func getContentFromCSV() [][]string {
-	f, err := os.Open("tmp/example.csv")
+func GetContentFromCSV() ([][]string, error) {
+	f, err := os.Open("data/example.csv")
 	if err != nil {
-		panic("CSV File not found")
+		return nil, err
 	}
 	defer f.Close()
 
@@ -56,8 +63,8 @@ func getContentFromCSV() [][]string {
 	recs, err := r.ReadAll()
 	recs = recs[1:]
 	if err != nil {
-		panic("Failed")
+		return nil, err
 	}
-	fmt.Println(recs[0])
-	return recs
+
+	return recs, nil
 }

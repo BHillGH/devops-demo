@@ -6,10 +6,15 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"strings"
 )
 
 var accessCount int = 0
+
+type CSVLine struct {
+	ID   string
+	Name string
+	Hash string
+}
 
 func main() {
 	mux := http.NewServeMux()
@@ -29,13 +34,12 @@ func main() {
 
 func getNextLine() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		recs, err := GetContentFromCSV()
+		dataLines, err := GetContentFromCSV()
 		if err != nil {
 			log.Fatal(err)
 		}
 		fmt.Printf("Count: %v\n", accessCount)
-		fmt.Printf("length of recs: %v\n", len(recs))
-		if accessCount == len(recs) {
+		if accessCount == len(dataLines) {
 			w.WriteHeader(http.StatusExpectationFailed)
 			w.Write([]byte("End of CSV reached"))
 
@@ -43,7 +47,7 @@ func getNextLine() http.Handler {
 			return
 		}
 
-		line := strings.Join(recs[accessCount], ",")
+		line := ConvertToCSVLineString(dataLines[accessCount])
 		accessCount++
 
 		w.WriteHeader(http.StatusOK)
@@ -51,7 +55,11 @@ func getNextLine() http.Handler {
 	})
 }
 
-func GetContentFromCSV() ([][]string, error) {
+func ConvertToCSVLineString(line CSVLine) string {
+	return fmt.Sprintf("%s,%s,%s", line.ID, line.Name, line.Hash)
+}
+
+func GetContentFromCSV() ([]CSVLine, error) {
 	f, err := os.Open("data/example.csv")
 	if err != nil {
 		return nil, err
@@ -61,10 +69,25 @@ func GetContentFromCSV() ([][]string, error) {
 	r := csv.NewReader(f)
 
 	recs, err := r.ReadAll()
-	recs = recs[1:]
 	if err != nil {
 		return nil, err
 	}
 
-	return recs, nil
+	// Skip header row
+	recs = recs[1:]
+
+	var dataLine []CSVLine
+
+	for _, record := range recs {
+		if len(record) != 3 {
+			return nil, fmt.Errorf("unexpected record format: %v", record)
+		}
+		dataLine = append(dataLine, CSVLine{
+			ID:   record[0],
+			Name: record[1],
+			Hash: record[2],
+		})
+	}
+
+	return dataLine, nil
 }
